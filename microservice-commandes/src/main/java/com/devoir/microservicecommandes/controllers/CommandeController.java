@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RefreshScope
@@ -33,38 +34,42 @@ public class CommandeController implements HealthIndicator {
     @GetMapping
     public List<Commande> getLastCommandes() {
         logger.info("********* CommandeController getLastCommandes() ");
-        Date date = new Date(System.currentTimeMillis() - appProperties.getCommandesLast() * 24 * 60 * 60 * 1000L);
-        List<Commande> commandes = commandeRepository.findByDateAfter(date);
+
+        // Récupérer toutes les commandes triées par date décroissante
+        List<Commande> commandes = commandeRepository.findAllByOrderByDateDesc();
 
         if (commandes.isEmpty()) {
             throw new CommandeNotFoundException("Aucune commande n'est disponible");
         }
 
-        List<Commande> listeLimitee = commandes.subList(0, Math.min(appProperties.getCommandesLast(), commandes.size()));
-        return listeLimitee;
+        // Limiter la liste aux 5 dernières commandes
+        List<Commande> lastFiveCommandes = commandes.stream()
+                .limit(5) // Limiter à 5 commandes
+                .collect(Collectors.toList());
+
+        return lastFiveCommandes;
     }
 
     @GetMapping("/{id}")
-    public Optional<Commande> getCommandeById(@PathVariable long id) {
+    public Commande getCommandeById(@PathVariable long id) {
         logger.info("********* CommandeController getCommandeById(@PathVariable long id) ");
-        Optional<Commande> commande = commandeRepository.findById(id);
-
-        if (commande.isEmpty()) {
-            throw new CommandeNotFoundException("La commande correspondant à l'id " + id + " n'existe pas");
-        }
-
-        return commande;
+        return commandeRepository.findById(id)
+                .orElseThrow(() -> new CommandeNotFoundException("La commande correspondant à l'id " + id + " n'existe pas"));
     }
 
     @PostMapping
     public Commande createCommande(@RequestBody Commande commande) {
+        logger.info("********* CommandeController createCommande(@RequestBody Commande commande) ");
         commande.setDate(new Date());
         return commandeRepository.save(commande);
     }
 
     @PutMapping("/{id}")
     public Commande updateCommande(@PathVariable Long id, @RequestBody Commande commandeDetails) {
-        Commande commande = commandeRepository.findById(id).orElseThrow(() -> new RuntimeException("Commande not found"));
+        logger.info("********* CommandeController updateCommande(@PathVariable Long id, @RequestBody Commande commandeDetails) ");
+        Commande commande = commandeRepository.findById(id)
+                .orElseThrow(() -> new CommandeNotFoundException("La commande correspondant à l'id " + id + " n'existe pas"));
+
         commande.setDescription(commandeDetails.getDescription());
         commande.setQuantite(commandeDetails.getQuantite());
         commande.setMontant(commandeDetails.getMontant());
@@ -73,6 +78,10 @@ public class CommandeController implements HealthIndicator {
 
     @DeleteMapping("/{id}")
     public void deleteCommande(@PathVariable Long id) {
+        logger.info("********* CommandeController deleteCommande(@PathVariable Long id) ");
+        if (!commandeRepository.existsById(id)) {
+            throw new CommandeNotFoundException("La commande correspondant à l'id " + id + " n'existe pas");
+        }
         commandeRepository.deleteById(id);
     }
 
